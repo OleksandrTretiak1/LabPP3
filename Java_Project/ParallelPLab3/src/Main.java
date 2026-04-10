@@ -43,12 +43,20 @@ class Producer implements Runnable {
     private final int itemsCount;
     private final StorageManager manager;
     private final Semaphore finishSignal;
+    private final Thread thread; // Потік тепер всередині
 
     public Producer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal) {
         this.id = id;
         this.itemsCount = itemsCount;
         this.manager = manager;
         this.finishSignal = finishSignal;
+        // Клас передає сам себе (this) у потік, бо він реалізує Runnable
+        this.thread = new Thread(this, "Producer-" + id);
+    }
+
+    // Метод для самозапуску
+    public void start() {
+        thread.start();
     }
 
     @Override
@@ -71,12 +79,18 @@ class Consumer implements Runnable {
     private final int itemsCount;
     private final StorageManager manager;
     private final Semaphore finishSignal;
+    private final Thread thread; // Потік тепер всередині
 
     public Consumer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal) {
         this.id = id;
         this.itemsCount = itemsCount;
         this.manager = manager;
         this.finishSignal = finishSignal;
+        this.thread = new Thread(this, "Consumer-" + id);
+    }
+
+    public void start() {
+        thread.start();
     }
 
     @Override
@@ -111,7 +125,6 @@ public class Main {
         int consumersCount = scanner.nextInt();
 
         StorageManager manager = new StorageManager(storageSize);
-
         Semaphore finishSignal = new Semaphore(0);
 
         int baseProducerItems = totalItems / producersCount;
@@ -119,8 +132,8 @@ public class Main {
 
         for (int i = 0; i < producersCount; i++) {
             int itemsToProduce = baseProducerItems + (i < remainderProducerItems ? 1 : 0);
-            int producerId = i + 1;
-            new Thread(new Producer(producerId, itemsToProduce, manager, finishSignal)).start();
+            // Тепер викликаємо метод start() самого об'єкта
+            new Producer(i + 1, itemsToProduce, manager, finishSignal).start();
         }
 
         int baseConsumerItems = totalItems / consumersCount;
@@ -128,8 +141,7 @@ public class Main {
 
         for (int i = 0; i < consumersCount; i++) {
             int itemsToConsume = baseConsumerItems + (i < remainderConsumerItems ? 1 : 0);
-            int consumerId = i + 1;
-            new Thread(new Consumer(consumerId, itemsToConsume, manager, finishSignal)).start();
+            new Consumer(i + 1, itemsToConsume, manager, finishSignal).start();
         }
 
         int totalThreads = producersCount + consumersCount;
