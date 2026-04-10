@@ -1,6 +1,4 @@
 import java.util.LinkedList;
-import java.util.List;
-import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.concurrent.Semaphore;
 
@@ -44,11 +42,13 @@ class Producer implements Runnable {
     private final int id;
     private final int itemsCount;
     private final StorageManager manager;
+    private final Semaphore finishSignal;
 
-    public Producer(int id, int itemsCount, StorageManager manager) {
+    public Producer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal) {
         this.id = id;
         this.itemsCount = itemsCount;
         this.manager = manager;
+        this.finishSignal = finishSignal;
     }
 
     @Override
@@ -60,6 +60,8 @@ class Producer implements Runnable {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            finishSignal.release();
         }
     }
 }
@@ -68,11 +70,13 @@ class Consumer implements Runnable {
     private final int id;
     private final int itemsCount;
     private final StorageManager manager;
+    private final Semaphore finishSignal;
 
-    public Consumer(int id, int itemsCount, StorageManager manager) {
+    public Consumer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal) {
         this.id = id;
         this.itemsCount = itemsCount;
         this.manager = manager;
+        this.finishSignal = finishSignal;
     }
 
     @Override
@@ -84,6 +88,8 @@ class Consumer implements Runnable {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            finishSignal.release();
         }
     }
 }
@@ -105,7 +111,8 @@ public class Main {
         int consumersCount = scanner.nextInt();
 
         StorageManager manager = new StorageManager(storageSize);
-        List<Thread> threads = new ArrayList<>();
+
+        Semaphore finishSignal = new Semaphore(0);
 
         int baseProducerItems = totalItems / producersCount;
         int remainderProducerItems = totalItems % producersCount;
@@ -113,11 +120,7 @@ public class Main {
         for (int i = 0; i < producersCount; i++) {
             int itemsToProduce = baseProducerItems + (i < remainderProducerItems ? 1 : 0);
             int producerId = i + 1;
-
-            Producer producer = new Producer(producerId, itemsToProduce, manager);
-            Thread pThread = new Thread(producer);
-            threads.add(pThread);
-            pThread.start();
+            new Thread(new Producer(producerId, itemsToProduce, manager, finishSignal)).start();
         }
 
         int baseConsumerItems = totalItems / consumersCount;
@@ -126,15 +129,12 @@ public class Main {
         for (int i = 0; i < consumersCount; i++) {
             int itemsToConsume = baseConsumerItems + (i < remainderConsumerItems ? 1 : 0);
             int consumerId = i + 1;
-
-            Consumer consumer = new Consumer(consumerId, itemsToConsume, manager);
-            Thread cThread = new Thread(consumer);
-            threads.add(cThread);
-            cThread.start();
+            new Thread(new Consumer(consumerId, itemsToConsume, manager, finishSignal)).start();
         }
 
-        for (Thread thread : threads) {
-            thread.join();
+        int totalThreads = producersCount + consumersCount;
+        for (int i = 0; i < totalThreads; i++) {
+            finishSignal.acquire();
         }
 
         System.out.println("Усі потоки завершили роботу. Програма коректно закривається.");

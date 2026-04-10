@@ -35,7 +35,8 @@ class StorageManager(storageSize: Int) {
 class Producer(
     private val id: Int,
     private val itemsCount: Int,
-    private val manager: StorageManager
+    private val manager: StorageManager,
+    private val finishSignal: Semaphore // Додано
 ) : Runnable {
     override fun run() {
         try {
@@ -45,6 +46,8 @@ class Producer(
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
+        } finally {
+            finishSignal.release()
         }
     }
 }
@@ -52,7 +55,8 @@ class Producer(
 class Consumer(
     private val id: Int,
     private val itemsCount: Int,
-    private val manager: StorageManager
+    private val manager: StorageManager,
+    private val finishSignal: Semaphore // Додано
 ) : Runnable {
     override fun run() {
         try {
@@ -62,6 +66,8 @@ class Consumer(
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
+        } finally {
+            finishSignal.release()
         }
     }
 }
@@ -82,7 +88,8 @@ fun main() {
     val consumersCount = scanner.nextInt()
 
     val manager = StorageManager(storageSize)
-    val threads = ArrayList<Thread>()
+
+    val finishSignal = Semaphore(0)
 
     val baseProducerItems = totalItems / producersCount
     val remainderProducerItems = totalItems % producersCount
@@ -91,10 +98,8 @@ fun main() {
         val itemsToProduce = baseProducerItems + if (i < remainderProducerItems) 1 else 0
         val producerId = i + 1
 
-        val producer = Producer(producerId, itemsToProduce, manager)
-        val pThread = Thread(producer)
-        threads.add(pThread)
-        pThread.start()
+        val producer = Producer(producerId, itemsToProduce, manager, finishSignal)
+        Thread(producer).start()
     }
 
     val baseConsumerItems = totalItems / consumersCount
@@ -104,14 +109,13 @@ fun main() {
         val itemsToConsume = baseConsumerItems + if (i < remainderConsumerItems) 1 else 0
         val consumerId = i + 1
 
-        val consumer = Consumer(consumerId, itemsToConsume, manager)
-        val cThread = Thread(consumer)
-        threads.add(cThread)
-        cThread.start()
+        val consumer = Consumer(consumerId, itemsToConsume, manager, finishSignal)
+        Thread(consumer).start()
     }
 
-    for (thread in threads) {
-        thread.join()
+    val totalThreads = producersCount + consumersCount
+    repeat(totalThreads) {
+        finishSignal.acquire()
     }
 
     println("Усі потоки завершили роботу. Програма коректно закривається.")

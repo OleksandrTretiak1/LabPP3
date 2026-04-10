@@ -50,12 +50,14 @@ namespace ParallelPLab3
         private readonly int _id;
         private readonly int _itemsCount;
         private readonly StorageManager _manager;
+        private readonly Semaphore _finishSignal;
 
-        public Producer(int id, int itemsCount, StorageManager manager)
+        public Producer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal)
         {
             _id = id;
             _itemsCount = itemsCount;
             _manager = manager;
+            _finishSignal = finishSignal;
         }
 
         public void Run()
@@ -65,6 +67,7 @@ namespace ParallelPLab3
                 string item = $"Item_{_id}_{i + 1}";
                 _manager.AddItem(item, _id);
             }
+            _finishSignal.Release();
         }
     }
 
@@ -73,12 +76,14 @@ namespace ParallelPLab3
         private readonly int _id;
         private readonly int _itemsCount;
         private readonly StorageManager _manager;
+        private readonly Semaphore _finishSignal;
 
-        public Consumer(int id, int itemsCount, StorageManager manager)
+        public Consumer(int id, int itemsCount, StorageManager manager, Semaphore finishSignal)
         {
             _id = id;
             _itemsCount = itemsCount;
             _manager = manager;
+            _finishSignal = finishSignal;
         }
 
         public void Run()
@@ -88,6 +93,7 @@ namespace ParallelPLab3
                 _manager.TakeItem(_id);
                 Thread.Sleep(1000);
             }
+            _finishSignal.Release();
         }
     }
 
@@ -112,7 +118,8 @@ namespace ParallelPLab3
             Console.WriteLine("--------------------------\n");
 
             StorageManager manager = new StorageManager(storageSize);
-            List<Thread> threads = new List<Thread>();
+
+            Semaphore finishSignal = new Semaphore(0, producersCount + consumersCount);
 
             int baseProducerItems = totalItems / producersCount;
             int remainderProducerItems = totalItems % producersCount;
@@ -120,10 +127,8 @@ namespace ParallelPLab3
             for (int i = 0; i < producersCount; i++)
             {
                 int itemsToProduce = baseProducerItems + (i < remainderProducerItems ? 1 : 0);
-                Producer producer = new Producer(i + 1, itemsToProduce, manager);
-                Thread pThread = new Thread(producer.Run);
-                threads.Add(pThread);
-                pThread.Start();
+                Producer producer = new Producer(i + 1, itemsToProduce, manager, finishSignal);
+                new Thread(producer.Run).Start();
             }
 
             int baseConsumerItems = totalItems / consumersCount;
@@ -132,15 +137,13 @@ namespace ParallelPLab3
             for (int i = 0; i < consumersCount; i++)
             {
                 int itemsToConsume = baseConsumerItems + (i < remainderConsumerItems ? 1 : 0);
-                Consumer consumer = new Consumer(i + 1, itemsToConsume, manager);
-                Thread cThread = new Thread(consumer.Run);
-                threads.Add(cThread);
-                cThread.Start();
+                Consumer consumer = new Consumer(i + 1, itemsToConsume, manager, finishSignal);
+                new Thread(consumer.Run).Start();
             }
 
-            foreach (var thread in threads)
+            for (int i = 0; i < (producersCount + consumersCount); i++)
             {
-                thread.Join();
+                finishSignal.WaitOne();
             }
 
             Console.WriteLine("\n[Успіх] Усі потоки завершили роботу. Сховище пусте.");
